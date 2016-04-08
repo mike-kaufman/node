@@ -300,10 +300,20 @@ class Environment {
     inline int fields_count() const;
     inline bool callbacks_enabled();
     inline void set_enable_callbacks(uint32_t flag);
+    inline int64_t get_next_async_wrap_uid();
+    inline int64_t get_current_async_wrap_uid();
+    inline void set_current_async_wrap_uid(int64_t value);
+    inline v8::Local<v8::Uint32Array> get_current_async_id_array();
+    inline v8::Local<v8::Uint32Array> get_next_async_id_array();
 
    private:
     friend class Environment;  // So we can call the constructor.
-    inline AsyncHooks();
+    inline AsyncHooks(Environment* env);
+
+    int64_t async_wrap_counter_uid_;
+    int64_t async_wrap_current_uid_;
+    v8::Persistent<v8::Uint32Array>  async_wrap_current_id_array_;
+    v8::Persistent<v8::Uint32Array>  async_wrap_next_id_array_;
 
     enum Fields {
       // Set this to not zero if the init hook should be called.
@@ -312,6 +322,7 @@ class Environment {
     };
 
     uint32_t fields_[kFieldsCount];
+    Environment* env_;
 
     DISALLOW_COPY_AND_ASSIGN(AsyncHooks);
   };
@@ -473,10 +484,6 @@ class Environment {
   void PrintSyncTrace() const;
   inline void set_trace_sync_io(bool value);
 
-  inline int64_t get_next_async_wrap_uid();
-  inline int64_t get_current_async_wrap_uid();
-  inline void set_current_async_wrap_uid(int64_t value);
-
   inline uint32_t* heap_statistics_buffer() const;
   inline void set_heap_statistics_buffer(uint32_t* pointer);
 
@@ -579,8 +586,7 @@ class Environment {
   bool printed_error_;
   bool trace_sync_io_;
   size_t makecallback_cntr_;
-  int64_t async_wrap_counter_uid_;
-  int64_t async_wrap_current_uid_;
+
   debugger::Agent debugger_agent_;
 
   HandleWrapQueue handle_wrap_queue_;

@@ -81,8 +81,34 @@ inline v8::Isolate* Environment::IsolateData::isolate() const {
   return isolate_;
 }
 
-inline Environment::AsyncHooks::AsyncHooks() {
-  for (int i = 0; i < kFieldsCount; i++) fields_[i] = 0;
+inline Environment::AsyncHooks::AsyncHooks(Environment* env)
+    : async_wrap_current_uid_(0),
+      async_wrap_counter_uid_(0),
+      env_(env) {
+
+  for (int i = 0; i < kFieldsCount; i++) {
+    fields_[i] = 0;
+  }
+  
+  v8::HandleScope handle_scope(env_->isolate());
+
+  // set up int array for returing async_wrap_counter_uid_ value
+  const size_t array_length = sizeof(async_wrap_counter_uid_) / sizeof(int32_t);
+  static_assert(array_length == 2, "async_wrap_counter_uid_ unexpected size");
+  v8::Local<v8::ArrayBuffer> ab =
+    v8::ArrayBuffer::New(this->env_->isolate(), &async_wrap_counter_uid_, array_length);
+  v8::Local<v8::Uint32Array> ua =
+    v8::Uint32Array::New(ab, 0, array_length);
+  this->async_wrap_next_id_array_.Reset(this->env_->isolate(), ua);
+
+  // set up int array for returing async_wrap_current_uid_ value
+  const size_t array_length2 = sizeof(async_wrap_current_uid_) / sizeof(int32_t);
+  v8::Local<v8::ArrayBuffer> ab2 =
+    v8::ArrayBuffer::New(this->env_->isolate(), &async_wrap_current_uid_, array_length);
+  v8::Local<v8::Uint32Array> ua2 =
+    v8::Uint32Array::New(ab2, 0, array_length);
+  this->async_wrap_current_id_array_.Reset(this->env_->isolate(), ua2);
+
 }
 
 inline uint32_t* Environment::AsyncHooks::fields() {
@@ -216,13 +242,12 @@ inline Environment::Environment(v8::Local<v8::Context> context,
                                 uv_loop_t* loop)
     : isolate_(context->GetIsolate()),
       isolate_data_(IsolateData::GetOrCreate(context->GetIsolate(), loop)),
+      async_hooks_(this),
       timer_base_(uv_now(loop)),
       using_domains_(false),
       printed_error_(false),
       trace_sync_io_(false),
       makecallback_cntr_(0),
-      async_wrap_counter_uid_(0),
-      async_wrap_current_uid_(0),
       debugger_agent_(this),
       http_parser_buffer_(nullptr),
       context_(context->GetIsolate(), context) {
@@ -373,15 +398,24 @@ inline void Environment::set_trace_sync_io(bool value) {
   trace_sync_io_ = value;
 }
 
-inline int64_t Environment::get_next_async_wrap_uid() {
+inline int64_t Environment::AsyncHooks::get_next_async_wrap_uid() {
   return ++async_wrap_counter_uid_;
 }
 
-inline int64_t Environment::get_current_async_wrap_uid() {
+inline int64_t Environment::AsyncHooks::get_current_async_wrap_uid() {
     return this->async_wrap_current_uid_;
 }
 
-inline void Environment::set_current_async_wrap_uid(int64_t value) {
+inline v8::Local<v8::Uint32Array> Environment::AsyncHooks::get_current_async_id_array() {
+    return async_wrap_current_id_array_.Get(this->env_->isolate());
+}
+
+inline v8::Local<v8::Uint32Array> Environment::AsyncHooks::get_next_async_id_array() {
+  return async_wrap_next_id_array_.Get(this->env_->isolate());
+}
+
+
+inline void Environment::AsyncHooks::set_current_async_wrap_uid(int64_t value) {
     this->async_wrap_current_uid_ = value;
 }
 
